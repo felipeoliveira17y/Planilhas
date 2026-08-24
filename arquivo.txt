@@ -1,0 +1,917 @@
+Perfeito! ✅ Então a parte de gerenciamento das pastas está funcionando.
+
+Agora vamos fazer o primeiro fluxo completo do sistema:
+
+    Cadastrar cliente → gerar ID → salvar no Excel → criar pasta automaticamente.
+
+1. Vamos melhorar o excel.py
+
+Além de ler tabelas, ele precisa conseguir adicionar registros à tbClientes.
+
+Substitua o conteúdo do excel.py por este:
+
+from pathlib import Path
+from openpyxl import load_workbook
+
+
+ARQUIVO_EXCEL = Path(__file__).parent / "SistemaAgronomia.xlsx"
+
+
+def abrir_excel():
+    if not ARQUIVO_EXCEL.exists():
+        raise FileNotFoundError(
+            f"Arquivo Excel não encontrado:\n{ARQUIVO_EXCEL}"
+        )
+
+    return load_workbook(ARQUIVO_EXCEL)
+
+
+def encontrar_tabela(wb, nome_tabela):
+
+    for ws in wb.worksheets:
+
+        if nome_tabela in ws.tables:
+
+            tabela = ws.tables[nome_tabela]
+
+            return ws, tabela
+
+    raise ValueError(
+        f"A tabela '{nome_tabela}' não foi encontrada."
+    )
+
+
+def ler_tabela(nome_tabela):
+
+    wb = abrir_excel()
+
+    ws, tabela = encontrar_tabela(
+        wb,
+        nome_tabela
+    )
+
+    dados = list(ws[tabela.ref])
+
+    cabecalho = [
+        celula.value
+        for celula in dados[0]
+    ]
+
+    resultado = []
+
+    for linha in dados[1:]:
+
+        valores = [
+            celula.value
+            for celula in linha
+        ]
+
+        if not any(
+            valor is not None
+            for valor in valores
+        ):
+            continue
+
+        resultado.append(
+            dict(zip(cabecalho, valores))
+        )
+
+    return resultado
+
+
+def gerar_id_cliente():
+
+    clientes = ler_tabela("tbClientes")
+
+    maior_id = 0
+
+    for cliente in clientes:
+
+        id_cliente = cliente.get("ID_CLIENTE")
+
+        if not id_cliente:
+            continue
+
+        try:
+            numero = int(
+                id_cliente.split("-")[1]
+            )
+
+            maior_id = max(
+                maior_id,
+                numero
+            )
+
+        except (ValueError, IndexError):
+            continue
+
+    proximo = maior_id + 1
+
+    return f"CLI-{proximo:03d}"
+
+
+def adicionar_cliente(dados):
+
+    wb = abrir_excel()
+
+    ws, tabela = encontrar_tabela(
+        wb,
+        "tbClientes"
+    )
+
+    # Descobre a próxima linha disponível
+    proxima_linha = tabela.max_row + 1
+
+    # Cabeçalhos da tabela
+    cabecalho = [
+        celula.value
+        for celula in ws[tabela.ref.split(":")[0][:-1] + "1"]
+    ]
+
+    # Forma mais segura de pegar os cabeçalhos
+    primeira_linha = tabela.ref.split(":")[0]
+    primeira_coluna = ws[primeira_linha].column
+
+    cabecalho = []
+
+    for coluna in range(
+        primeira_coluna,
+        primeira_coluna + len(tabela.tableColumns)
+    ):
+        cabecalho.append(
+            ws.cell(1, coluna).value
+        )
+
+    # Insere os valores
+    for coluna, nome_coluna in enumerate(
+        cabecalho,
+        start=primeira_coluna
+    ):
+
+        valor = dados.get(
+            nome_coluna,
+            ""
+        )
+
+        ws.cell(
+            proxima_linha,
+            coluna,
+            valor
+        )
+
+    # Expande a tabela
+    inicio = tabela.ref.split(":")[0]
+    fim_coluna = ws.cell(
+        1,
+        primeira_coluna + len(cabecalho) - 1
+    ).column_letter
+
+    tabela.ref = (
+        f"{inicio}:{fim_coluna}{proxima_linha}"
+    )
+
+    wb.save(ARQUIVO_EXCEL)
+
+2. Agora vamos testar o cadastro
+
+Não vamos criar a interface ainda. Primeiro vamos confirmar que o Python consegue gravar corretamente no Excel.
+
+Coloque temporariamente no app.py:
+
+from excel import gerar_id_cliente, adicionar_cliente
+from pastas import criar_pasta_cliente
+
+
+def main():
+
+    print("=== TESTE DE CADASTRO ===")
+    print()
+
+    # Gera o próximo ID
+    id_cliente = gerar_id_cliente()
+
+    print(f"ID gerado: {id_cliente}")
+
+    # Dados de teste
+    dados = {
+        "ID_CLIENTE": id_cliente,
+        "TIPO_CLIENTE": "Pessoa Física",
+        "ID_TIPO_CLIENTE": "CLI-001",
+        "NOME_RAZAO_SOCIAL": "Cliente Teste",
+        "CPF_CNPJ": "",
+        "RG_IE": "",
+        "TELEFONE": "",
+        "EMAIL": "",
+        "CEP": "",
+        "ENDERECO": "",
+        "NUMERO": "",
+        "COMPLEMENTO": "",
+        "BAIRRO": "",
+        "CIDADE": "",
+        "UF": "",
+        "OBSERVACOES": "Cadastro de teste",
+        "DATA_CADASTRO": "",
+        "ATIVO": "SIM"
+    }
+
+    # Salva no Excel
+    adicionar_cliente(dados)
+
+    print("Cliente salvo no Excel!")
+
+    # Cria as pastas
+    pasta = criar_pasta_cliente(
+        id_cliente,
+        dados["NOME_RAZAO_SOCIAL"]
+    )
+
+    print("Pastas criadas!")
+    print()
+    print(f"Pasta: {pasta}")
+
+
+if __name__ == "__main__":
+    main()
+
+Execute:
+
+python app.py
+
+O resultado esperado
+
+No CMD:
+
+=== TESTE DE CADASTRO ===
+
+ID gerado: CLI-001
+Cliente salvo no Excel!
+Pastas criadas!
+
+Pasta: C:\Users\Leonardo\Downloads\Sistema\Cliente\CLI-001 - Cliente Teste
+
+E no Excel deverá aparecer:
+
+ID_CLIENTE | TIPO_CLIENTE  | NOME_RAZAO_SOCIAL
+CLI-001    | Pessoa Física | Cliente Teste
+
+E no Windows:
+
+Cliente
+└── CLI-001 - Cliente Teste
+    ├── Documentação
+    ├── Serviços
+    ├── Financeiro
+    └── Outros
+
+Importante: é apenas um cadastro de teste. Depois que confirmarmos que o registro apareceu corretamente no tbClientes, vamos apagar esse teste e partir para a interface moderna da ProAgro.
+
+Essa interface será responsável por fazer tudo isso sem você precisar executar código manualmente.
+
+PS C:\Users\Leonardo\Downloads\Sistema> & C:\Users\Leonardo\AppData\Local\Python\pythoncore-3.14-64\python.exe c:/Users/Leonardo/Downloads/Sistema/app.py
+=== TESTE DE CADASTRO ===
+
+ID gerado: CLI-001
+Traceback (most recent call last):
+  File "c:\Users\Leonardo\Downloads\Sistema\app.py", line 54, in <module>
+    main()
+    ~~~~^^
+  File "c:\Users\Leonardo\Downloads\Sistema\app.py", line 38, in main
+    adicionar_cliente(dados)
+    ~~~~~~~~~~~~~~~~~^^^^^^^
+  File "c:\Users\Leonardo\Downloads\Sistema\excel.py", line 111, in adicionar_cliente
+    proxima_linha = tabela.max_row + 1
+                    ^^^^^^^^^^^^^^
+AttributeError: 'Table' object has no attribute 'max_row'
+PS C:\Users\Leonardo\Downloads\Sistema> 
+
+Sim — esse erro é nosso, não da sua planilha. 👍
+
+O problema está nesta linha:
+
+proxima_linha = tabela.max_row + 1
+
+Um objeto Table do openpyxl não possui max_row. Quem possui essa informação é a planilha/intervalo da tabela.
+
+Vamos corrigir o excel.py de uma vez e deixar a função mais robusta.
+Substitua apenas a função adicionar_cliente()
+
+No seu excel.py, procure:
+
+def adicionar_cliente(dados):
+
+e substitua toda essa função por:
+
+def adicionar_cliente(dados):
+
+    wb = abrir_excel()
+
+    ws, tabela = encontrar_tabela(
+        wb,
+        "tbClientes"
+    )
+
+    # Descobre os limites atuais da tabela
+    inicio, fim = tabela.ref.split(":")
+
+    # Coluna e linha inicial
+    coluna_inicial = ws[inicio].column
+    linha_inicial = ws[inicio].row
+
+    # Coluna e linha final
+    coluna_final = ws[fim].column
+    linha_final = ws[fim].row
+
+    # A próxima linha será logo abaixo da tabela
+    proxima_linha = linha_final + 1
+
+    # Obtém os cabeçalhos da tabela
+    cabecalho = []
+
+    for coluna in range(
+        coluna_inicial,
+        coluna_final + 1
+    ):
+        cabecalho.append(
+            ws.cell(
+                linha_inicial,
+                coluna
+            ).value
+        )
+
+    # Insere os dados
+    for coluna, nome_coluna in enumerate(
+        cabecalho,
+        start=coluna_inicial
+    ):
+
+        valor = dados.get(
+            nome_coluna,
+            ""
+        )
+
+        ws.cell(
+            proxima_linha,
+            coluna,
+            valor
+        )
+
+    # Atualiza o intervalo da tabela
+    nova_referencia = (
+        f"{inicio}:"
+        f"{ws.cell(proxima_linha, coluna_final).coordinate}"
+    )
+
+    tabela.ref = nova_referencia
+
+    # Salva o Excel
+    wb.save(ARQUIVO_EXCEL)
+
+Depois execute novamente
+
+python app.py
+
+O esperado é:
+
+=== TESTE DE CADASTRO ===
+
+ID gerado: CLI-001
+Cliente salvo no Excel!
+Pastas criadas!
+
+Pasta: C:\Users\Leonardo\Downloads\Sistema\Cliente\CLI-001 - Cliente Teste
+
+E no Excel:
+
+CLI-001 | Pessoa Física | Cliente Teste | ...
+
+Além disso:
+
+Cliente/
+└── CLI-001 - Cliente Teste/
+    ├── Documentação/
+    ├── Serviços/
+    ├── Financeiro/
+    └── Outros/
+
+⚠️ Um detalhe importante antes de executar
+
+Como o teste anterior falhou antes de salvar, provavelmente ainda não existe CLI-001 no Excel. Então está tudo bem executar novamente.
+
+Se agora funcionar, não execute o teste novamente, porque ele poderá criar outro cliente de teste. Aí vamos remover o cliente de teste e começar a construir a interface moderna da ProAgro Consultoria.
+
+=== TESTE DE CADASTRO ===
+
+ID gerado: CLI-001
+Cliente salvo no Excel!
+Pastas criadas!
+
+Pasta: c:\Users\Leonardo\Downloads\Sistema\Cliente\CLI-001 - Cliente Teste
+
+Perfeito! 🎯 O primeiro fluxo completo funcionou.
+
+Agora já temos:
+
+Python
+  │
+  ├── lê 01_CONFIG
+  │
+  ├── gera ID do cliente
+  │
+  ├── grava na tbClientes
+  │
+  └── cria automaticamente a estrutura de pastas
+          │
+          └── CLI-001 - Cliente Teste
+              ├── Documentação
+              ├── Serviços
+              ├── Financeiro
+              └── Outros
+
+Isso significa que a base da automação está funcionando.
+⚠️ Antes de continuarmos
+
+Como usamos Cliente Teste, agora temos um registro de teste no Excel:
+
+CLI-001 - Cliente Teste
+
+Não execute novamente o app.py de teste, porque ele pode criar outro cliente.
+
+Agora vamos substituir esse código de teste pela aplicação de verdade.
+Próxima etapa: interface ProAgro
+
+Vamos começar a construir o sistema com uma aparência mais profissional.
+
+A estrutura do programa ficará:
+
+Sistema/
+│
+├── app.py                 ← aplicação principal
+├── excel.py               ← comunicação com Excel
+├── pastas.py              ← gerenciamento dos clientes
+├── SistemaAgronomia.xlsx
+│
+├── Cliente/
+│   └── ...
+│
+└── Backups/
+
+E o app.py será responsável pela interface.
+Tela inicial
+
+Quero fazer algo nessa linha:
+
+┌──────────────────────────────────────────────────────────────┐
+│  PROAGRO CONSULTORIA                         🔔    👤        │
+├──────────────┬───────────────────────────────────────────────┤
+│              │                                               │
+│  🏠 INÍCIO   │  Dashboard                                   │
+│              │                                               │
+│  👥 CLIENTES │  Olá, seja bem-vindo!                        │
+│              │                                               │
+│  🗺 PROPRIED.│  ┌────────────┐ ┌────────────┐ ┌────────────┐│
+│              │  │ CLIENTES   │ │ SERVIÇOS   │ │ EQUIPAMENT.││
+│  📐 SERVIÇOS │  │     1      │ │     0      │ │     0      ││
+│              │  └────────────┘ └────────────┘ └────────────┘│
+│  📦 EQUIP.   │                                               │
+│              │  Atividades recentes                          │
+│  💰 FINANCE. │  ┌───────────────────────────────────────────┐│
+│              │  │ Cliente Teste                  CLI-001    ││
+│  📄 DOCUMENT.│  │ Cadastro realizado recentemente          ││
+│              │  └───────────────────────────────────────────┘│
+│  📊 RELATÓRIOS│                                             │
+│              │                                               │
+│  ⚙ CONFIG.   │                                               │
+│              │                                               │
+└──────────────┴───────────────────────────────────────────────┘
+
+E quando clicarmos em Clientes:
+
+┌──────────────────────────────────────────────────────────────┐
+│ Clientes                                ＋ NOVO CLIENTE      │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│ 🔎 Pesquisar...                     Tipo: Todos ▼            │
+│                                                              │
+│ ┌──────────────────────────────────────────────────────────┐ │
+│ │ ID       NOME                 TIPO             STATUS     │ │
+│ ├──────────────────────────────────────────────────────────┤ │
+│ │ CLI-001  Cliente Teste        Pessoa Física   ● Ativo    │ │
+│ └──────────────────────────────────────────────────────────┘ │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
+
+E Novo Cliente abrirá o formulário que conversamos.
+Mas antes de criar a interface
+
+Quero fazer uma coisa importante: não vamos jogar tudo dentro do app.py.
+
+À medida que o sistema crescer, podemos chegar a centenas de linhas rapidamente. Então vamos separar:
+
+app.py
+    ↓
+interface/
+    ├── dashboard.py
+    ├── clientes.py
+    ├── propriedades.py
+    ├── servicos.py
+    ├── equipamentos.py
+    ├── financeiro.py
+    ├── documentos.py
+    └── relatorios.py
+
+Assim, quando formos mexer na tela de clientes, por exemplo, não precisaremos alterar o restante do sistema.
+
+Esse é o momento certo para fazer essa organização, antes de começarmos a interface. Depois que a arquitetura estiver montada, partimos para o visual da ProAgro e para o cadastro real de clientes.
+
+hoje 11:27
+Feito
+
+Perfeito. 👍 Agora vamos montar a estrutura profissional da aplicação antes de colocar o visual.
+1. Crie estas pastas
+
+Dentro de Sistema, crie:
+
+Sistema/
+│
+├── app.py
+├── excel.py
+├── pastas.py
+├── SistemaAgronomia.xlsx
+│
+├── interface/
+│   ├── __init__.py
+│   ├── dashboard.py
+│   ├── clientes.py
+│   ├── propriedades.py
+│   ├── servicos.py
+│   ├── equipamentos.py
+│   ├── financeiro.py
+│   ├── documentos.py
+│   └── relatorios.py
+│
+├── Cliente/
+│
+└── Backups/
+
+O arquivo __init__.py pode ficar completamente vazio.
+2. Vamos começar pelo app.py
+
+Apague o código de teste que está nele e coloque:
+
+import tkinter as tk
+
+from interface.dashboard import Dashboard
+
+
+def main():
+    root = tk.Tk()
+
+    app = Dashboard(root)
+
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()
+
+3. Agora interface/dashboard.py
+
+Coloque:
+
+import tkinter as tk
+
+
+class Dashboard:
+
+    def __init__(self, root):
+
+        self.root = root
+
+        self.root.title(
+            "ProAgro Consultoria - Sistema de Gestão"
+        )
+
+        self.root.geometry(
+            "1200x700"
+        )
+
+        self.root.minsize(
+            1000,
+            600
+        )
+
+        self.criar_interface()
+
+    def criar_interface(self):
+
+        # ==============================
+        # MENU LATERAL
+        # ==============================
+
+        self.menu = tk.Frame(
+            self.root,
+            bg="#173F2A",
+            width=230
+        )
+
+        self.menu.pack(
+            side="left",
+            fill="y"
+        )
+
+        self.menu.pack_propagate(False)
+
+        # Logo / nome
+        logo = tk.Label(
+            self.menu,
+            text="PROAGRO",
+            font=("Arial", 22, "bold"),
+            fg="white",
+            bg="#173F2A"
+        )
+
+        logo.pack(
+            pady=(35, 5)
+        )
+
+        subtitulo = tk.Label(
+            self.menu,
+            text="CONSULTORIA",
+            font=("Arial", 9),
+            fg="#B7D8C4",
+            bg="#173F2A"
+        )
+
+        subtitulo.pack(
+            pady=(0, 35)
+        )
+
+        # Botões
+        botoes = [
+            ("⌂   Início", self.inicio),
+            ("♙   Clientes", self.clientes),
+            ("⌖   Propriedades", self.propriedades),
+            ("▣   Serviços", self.servicos),
+            ("▤   Equipamentos", self.equipamentos),
+            ("$   Financeiro", self.financeiro),
+            ("▧   Documentos", self.documentos),
+            ("▥   Relatórios", self.relatorios),
+        ]
+
+        for texto, comando in botoes:
+
+            botao = tk.Button(
+                self.menu,
+                text=texto,
+                command=comando,
+                anchor="w",
+                font=("Arial", 11),
+                fg="white",
+                bg="#173F2A",
+                activebackground="#245C3E",
+                activeforeground="white",
+                relief="flat",
+                bd=0,
+                padx=25,
+                pady=12,
+                cursor="hand2"
+            )
+
+            botao.pack(
+                fill="x"
+            )
+
+        # ==============================
+        # ÁREA PRINCIPAL
+        # ==============================
+
+        self.conteudo = tk.Frame(
+            self.root,
+            bg="#F4F7F5"
+        )
+
+        self.conteudo.pack(
+            side="right",
+            fill="both",
+            expand=True
+        )
+
+        self.inicio()
+
+    # ==================================
+    # PÁGINAS
+    # ==================================
+
+    def limpar_conteudo(self):
+
+        for widget in self.conteudo.winfo_children():
+            widget.destroy()
+
+    def inicio(self):
+
+        self.limpar_conteudo()
+
+        titulo = tk.Label(
+            self.conteudo,
+            text="Dashboard",
+            font=("Arial", 26, "bold"),
+            fg="#173F2A",
+            bg="#F4F7F5"
+        )
+
+        titulo.pack(
+            anchor="w",
+            padx=40,
+            pady=(35, 5)
+        )
+
+        subtitulo = tk.Label(
+            self.conteudo,
+            text="Visão geral do sistema",
+            font=("Arial", 11),
+            fg="#66756D",
+            bg="#F4F7F5"
+        )
+
+        subtitulo.pack(
+            anchor="w",
+            padx=40
+        )
+
+        # Cards
+        cards = tk.Frame(
+            self.conteudo,
+            bg="#F4F7F5"
+        )
+
+        cards.pack(
+            fill="x",
+            padx=40,
+            pady=35
+        )
+
+        self.criar_card(
+            cards,
+            "CLIENTES",
+            "0",
+            0
+        )
+
+        self.criar_card(
+            cards,
+            "SERVIÇOS",
+            "0",
+            1
+        )
+
+        self.criar_card(
+            cards,
+            "EQUIPAMENTOS",
+            "0",
+            2
+        )
+
+        self.criar_card(
+            cards,
+            "DOCUMENTOS",
+            "0",
+            3
+        )
+
+    def criar_card(
+        self,
+        parent,
+        titulo,
+        valor,
+        coluna
+    ):
+
+        card = tk.Frame(
+            parent,
+            bg="white",
+            width=190,
+            height=120,
+            highlightbackground="#D8E2DC",
+            highlightthickness=1
+        )
+
+        card.grid(
+            row=0,
+            column=coluna,
+            padx=8,
+            sticky="nsew"
+        )
+
+        parent.grid_columnconfigure(
+            coluna,
+            weight=1
+        )
+
+        tk.Label(
+            card,
+            text=titulo,
+            font=("Arial", 9, "bold"),
+            fg="#718078",
+            bg="white"
+        ).pack(
+            anchor="w",
+            padx=18,
+            pady=(18, 5)
+        )
+
+        tk.Label(
+            card,
+            text=valor,
+            font=("Arial", 26, "bold"),
+            fg="#173F2A",
+            bg="white"
+        ).pack(
+            anchor="w",
+            padx=18
+        )
+
+    # ==================================
+    # MÓDULOS
+    # ==================================
+
+    def clientes(self):
+        self.mostrar_pagina("Clientes")
+
+    def propriedades(self):
+        self.mostrar_pagina("Propriedades")
+
+    def servicos(self):
+        self.mostrar_pagina("Serviços")
+
+    def equipamentos(self):
+        self.mostrar_pagina("Equipamentos")
+
+    def financeiro(self):
+        self.mostrar_pagina("Financeiro")
+
+    def documentos(self):
+        self.mostrar_pagina("Documentos")
+
+    def relatorios(self):
+        self.mostrar_pagina("Relatórios")
+
+    def mostrar_pagina(self, nome):
+
+        self.limpar_conteudo()
+
+        tk.Label(
+            self.conteudo,
+            text=nome,
+            font=("Arial", 26, "bold"),
+            fg="#173F2A",
+            bg="#F4F7F5"
+        ).pack(
+            anchor="w",
+            padx=40,
+            pady=(35, 5)
+        )
+
+        tk.Label(
+            self.conteudo,
+            text="Módulo em desenvolvimento",
+            font=("Arial", 11),
+            fg="#66756D",
+            bg="#F4F7F5"
+        ).pack(
+            anchor="w",
+            padx=40
+        )
+
+4. Teste
+
+Agora execute:
+
+python app.py
+
+Deve aparecer uma janela semelhante a:
+
+┌─────────────────────────────────────────────────────┐
+│ PROAGRO                 │ Dashboard                 │
+│ CONSULTORIA             │ Visão geral do sistema    │
+│                         │                           │
+│ ⌂  Início               │ ┌────────┐ ┌────────┐    │
+│ ♙  Clientes             │ │CLIENTES│ │SERVIÇOS│    │
+│ ⌖  Propriedades         │ │   0    │ │   0    │    │
+│ ▣  Serviços              │ └────────┘ └────────┘    │
+│ ▤  Equipamentos         │                           │
+│ $  Financeiro           │                           │
+│ ▧  Documentos           │                           │
+│ ▥  Relatórios           │                           │
+│                         │                           │
+└─────────────────────────┴───────────────────────────┘
+
+Os botões de Clientes, Propriedades, Serviços etc. ainda mostrarão "Módulo em desenvolvimento". Isso é proposital.
+Depois desse teste
+
+Se a janela abrir corretamente, o próximo passo será transformar o módulo Clientes em uma tela de verdade, conectando:
+
+Interface → excel.py → tbClientes → pastas.py → pasta do cliente.
+
+E aí começaremos a trabalhar no visual mais refinado da ProAgro, em vez de continuar fazendo testes pelo CMD.
+Chat pausado até o limite ser renovado à(s) 11:39
+Você atingiu o limite de chats com arquivos ou imagens. Comece um novo chat só de texto ou faça upgrade para continuar agora.
