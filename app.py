@@ -5,26 +5,32 @@ from interface.dashboard import Dashboard
 
 
 def main():
-    # Força o Windows a separar o app do processo padrão do Python na barra de tarefas
+    # 1. Define o ID exclusivo para o Windows ANTES de criar qualquer janela
     try:
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
-            "landmensure.sistema.gestao.1.0"
-        )
-    except:
-        pass
+        myappid = "landmensure.sistema.gestao.1.0"
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+    except Exception as e:
+        print("Erro ao definir AppUserModelID:", e)
 
     root = tk.Tk()
-    root.title("Landmensure")
+    root.title("Landmensure - Sistema de Gestão")
 
-    nome_arquivo_icone = "icone.ico"
+    # 2. Caminho para os ícones dentro da pasta "img"
+    caminho_icone_principal = os.path.join("img", "icone2.ico")
+    caminho_icone_alternativo = os.path.join("img", "icone.ico")
 
-    if os.path.exists(nome_arquivo_icone):
+    if os.path.exists(caminho_icone_principal):
         try:
-            root.iconbitmap(nome_arquivo_icone)
+            root.iconbitmap(caminho_icone_principal)
         except Exception as e:
-            print("Erro ao carregar o ícone:", e)
+            print("Erro ao carregar o ícone principal:", e)
+    elif os.path.exists(caminho_icone_alternativo):
+        try:
+            root.iconbitmap(caminho_icone_alternativo)
+        except Exception as e:
+            print("Erro ao carregar o ícone alternativo:", e)
     else:
-        print(f"O arquivo '{nome_arquivo_icone}' não foi encontrado na raiz do projeto.")
+        print("Nenhum arquivo de ícone foi encontrado na pasta 'img'.")
 
     app = Dashboard(root)
     root.mainloop()

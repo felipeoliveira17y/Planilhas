@@ -1,7 +1,11 @@
 import os
-import tkinter as tk
-from PIL import Image, ImageTk
+import customtkinter as ctk
+from PIL import Image
 from excel import ler_tabela
+
+# Configuração global de tema do CustomTkinter
+ctk.set_appearance_mode("System")  # Segue o tema do Windows (Dark/Light)
+ctk.set_default_color_theme("dark-blue")
 
 
 class Dashboard:
@@ -12,7 +16,7 @@ class Dashboard:
         self.root.geometry("1200x700")
         self.root.minsize(1000, 600)
 
-        # Paleta de Cores (Laranja e Preto Moderno)
+        # Paleta de Cores Moderna (Laranja e Preto Elegante)
         self.cor_menu = "#161616"
         self.cor_laranja = "#FF6600"
         self.cor_hover = "#2A2A2A"
@@ -25,39 +29,42 @@ class Dashboard:
 
     def criar_interface(self):
         # ==============================
-        # MENU LATERAL (BANDEJA RECOLHÍVEL)
+        # MENU LATERAL (BANDEJA ESTILIZADA)
         # ==============================
-        self.menu = tk.Frame(
+        self.menu = ctk.CTkFrame(
             self.root,
-            bg=self.cor_menu,
+            fg_color=self.cor_menu,
+            corner_radius=0,
             width=70
         )
         self.menu.pack(side="left", fill="y")
         self.menu.pack_propagate(False)
 
         # Topo do Menu: Botão Animado de Expandir/Recolher
-        topo_menu = tk.Frame(self.menu, bg=self.cor_menu, height=60)
+        topo_menu = ctk.CTkFrame(self.menu, fg_color=self.cor_menu, height=60)
         topo_menu.pack(fill="x", pady=10)
 
-        self.btn_toggle = tk.Button(
+        self.btn_toggle = ctk.CTkButton(
             topo_menu,
-            text="≡",  # Símbolo refinado para o menu
+            text="≡",
             command=self.alternar_menu,
             font=("Arial", 18, "bold"),
-            fg="white",
-            bg=self.cor_menu,
-            activebackground=self.cor_menu,
-            activeforeground=self.cor_laranja,
-            relief="flat",
-            bd=0,
-            cursor="hand2",
-            width=3
+            text_color="white",
+            fg_color=self.cor_menu,
+            hover_color=self.cor_hover,
+            corner_radius=8,
+            width=40,
+            height=40
         )
-        self.btn_toggle.pack(side="left", padx=10)
+        self.btn_toggle.pack(side="left", padx=15)
 
         # Container dos Botões
-        self.botoes_container = tk.Frame(self.menu, bg=self.cor_menu)
-        self.botoes_container.pack(fill="both", expand=True, pady=10)
+        self.botoes_container = ctk.CTkScrollableFrame(
+            self.menu,
+            fg_color=self.cor_menu,
+            scrollbar_button_color=self.cor_laranja
+        )
+        self.botoes_container.pack(fill="both", expand=True, pady=5)
 
         # Lista de menus
         self.botoes_info = [
@@ -79,21 +86,28 @@ class Dashboard:
         # ==============================
         # ÁREA PRINCIPAL
         # ==============================
-        self.conteudo = tk.Frame(
+        self.conteudo = ctk.CTkFrame(
             self.root,
-            bg=self.cor_conteudo
+            fg_color=self.cor_conteudo,
+            corner_radius=0
         )
         self.conteudo.pack(side="right", fill="both", expand=True)
 
         self.inicio()
 
     def criar_botao_lateral(self, arquivo_icone, texto, comando):
-        # Frame individual para o botão (simula um componente unificado com ícone fixo + texto dinâmico)
-        btn_frame = tk.Frame(self.botoes_container, bg=self.cor_menu, cursor="hand2")
+        # Frame individual para o botão unificado
+        btn_frame = ctk.CTkFrame(
+            self.botoes_container,
+            fg_color=self.cor_menu,
+            corner_radius=8,
+            height=45
+        )
         btn_frame.pack(fill="x", pady=6, padx=8)
+        btn_frame.pack_propagate(False)
 
         caminho_img = os.path.join("icons", arquivo_icone)
-        imagem_tk = None
+        imagem_ctk = None
         if os.path.exists(caminho_img):
             try:
                 img = Image.open(caminho_img).convert("RGBA")
@@ -106,66 +120,47 @@ class Dashboard:
                         novos_dados.append(item)
                 img.putdata(novos_dados)
                 
-                img = img.resize((22, 22), Image.Resampling.LANCZOS)
-                imagem_tk = ImageTk.PhotoImage(img)
+                imagem_ctk = ctk.CTkImage(light_image=img, dark_image=img, size=(20, 20))
             except Exception as e:
                 print(f"Erro ao processar ícone {arquivo_icone}: {e}")
 
-        # Ícone Fixo (Label independente para não se mover)
-        lbl_icone = tk.Label(btn_frame, bg=self.cor_menu, cursor="hand2")
-        if imagem_tk:
-            lbl_icone.image = imagem_tk
-            lbl_icone.config(image=imagem_tk)
-        lbl_icone.pack(side="left", padx=12, pady=10)
-
-        # Texto Dinâmico (Label que aparece apenas quando expandido)
-        lbl_texto = tk.Label(
+        # Botão ajustado com alinhamento à esquerda perfeito para modo recolhido e expandido
+        btn_acao = ctk.CTkButton(
             btn_frame,
-            text=texto,
-            font=("Arial", 11),
-            fg="#CCCCCC",
-            bg=self.cor_menu,
+            text=f"    {texto}" if self.menu_expandido else "",
+            image=imagem_ctk,
+            compound="left",
             anchor="w",
-            cursor="hand2"
+            command=comando,
+            font=("Arial", 12),
+            text_color="#CCCCCC",
+            fg_color=self.cor_menu,
+            hover_color=self.cor_hover,
+            corner_radius=8
         )
-        # Inicialmente recolhido (texto oculto)
-        # Não damos .pack() no texto agora para ele ficar invisível na largura de 70px
+        # Margem à esquerda ajustada para centralizar o ícone quando a bandeja estiver recolhida (70px)
+        btn_acao.pack(fill="both", expand=True, padx=8, pady=2)
 
-        # Guardamos referências úteis no frame
-        btn_frame.lbl_texto = lbl_texto
-        btn_frame.lbl_icone = lbl_icone
-
-        # Eventos de Clique e Hover para todo o Frame e seus filhos
-        for widget in (btn_frame, lbl_icone, lbl_texto):
-            widget.bind("<Button-1>", lambda e: comando())
-            widget.bind("<Enter>", lambda e: self.aplicar_hover(btn_frame, True))
-            widget.bind("<Leave>", lambda e: self.aplicar_hover(btn_frame, False))
+        # Guardamos referências para manipulação na expansão
+        btn_frame.btn_acao = btn_acao
+        btn_frame.texto_original = texto
+        btn_frame.icone = imagem_ctk
 
         return btn_frame
 
-    def aplicar_hover(self, frame, entrar):
-        cor = self.cor_hover if entrar else self.cor_menu
-        cor_txt = self.cor_laranja if entrar else "#CCCCCC"
-        
-        frame.config(bg=cor)
-        frame.lbl_icone.config(bg=cor)
-        frame.lbl_texto.config(bg=cor, fg=cor_txt)
-
     def alternar_menu(self):
-        """Expande ou recolhe a bandeja lateral com animação fluida no ícone hambúrguer"""
+        """Expande ou recolhe a bandeja lateral com fluidez"""
         if self.menu_expandido:
             # Recolher
-            self.menu.config(width=70)
-            self.btn_toggle.config(text="≡") # Ícone recolhido
+            self.menu.configure(width=70)
             for frame in self.botoes_criados:
-                frame.lbl_texto.pack_forget() # Esconde o texto
+                frame.btn_acao.configure(text="")
             self.menu_expandido = False
         else:
             # Expandir
-            self.menu.config(width=220)
-            self.btn_toggle.config(text="‹") # Ícone animado indicando recolhimento
+            self.menu.configure(width=220)
             for frame in self.botoes_criados:
-                frame.lbl_texto.pack(side="left", padx=(0, 10), fill="x", expand=True) # Mostra o texto fluido
+                frame.btn_acao.configure(text=f"    {frame.texto_original}")
             self.menu_expandido = True
 
     # ==================================
@@ -179,23 +174,21 @@ class Dashboard:
     def inicio(self):
         self.limpar_conteudo()
 
-        titulo = tk.Label(
+        titulo = ctk.CTkLabel(
             self.conteudo,
             text="Dashboard",
             font=("Arial", 26, "bold"),
-            fg="#1A1A1A",
-            bg=self.cor_conteudo
+            text_color="#1A1A1A"
         )
         titulo.pack(anchor="w", padx=40, pady=(35, 5))
 
-        subtitulo = tk.Label(
+        subtituto = ctk.CTkLabel(
             self.conteudo,
             text="Visão geral do sistema Landmensure",
-            font=("Arial", 11),
-            fg="#666666",
-            bg=self.cor_conteudo
+            font=("Arial", 12),
+            text_color="#666666"
         )
-        subtitulo.pack(anchor="w", padx=40)
+        subtituto.pack(anchor="w", padx=40)
 
         # Lendo os dados reais do Excel com segurança
         try:
@@ -218,7 +211,7 @@ class Dashboard:
         except:
             total_documentos = "0"
 
-        cards = tk.Frame(self.conteudo, bg=self.cor_conteudo)
+        cards = ctk.CTkFrame(self.conteudo, fg_color="transparent")
         cards.pack(fill="x", padx=40, pady=35)
 
         self.criar_card(cards, "CLIENTES", total_clientes, 0)
@@ -227,37 +220,40 @@ class Dashboard:
         self.criar_card(cards, "DOCUMENTOS", total_documentos, 3)
             
     def criar_card(self, parent, titulo, valor, coluna):
-        card = tk.Frame(
+        card = ctk.CTkFrame(
             parent,
-            bg="white",
+            fg_color="white",
+            corner_radius=10,
+            border_width=1,
+            border_color="#E0E0E0",
             width=190,
-            height=120,
-            highlightbackground="#E0E0E0",
-            highlightthickness=1
+            height=120
         )
         card.grid(row=0, column=coluna, padx=8, sticky="nsew")
         parent.grid_columnconfigure(coluna, weight=1)
         card.pack_propagate(False)
 
-        # Detalhe laranja no topo do card
-        barra = tk.Frame(card, bg=self.cor_laranja, height=4)
-        barra.pack(fill="x", side="top")
+        # Barra laranja fixa no topo do card (usando pack com side="top" para respeitar o espaço)
+        barra = ctk.CTkFrame(card, fg_color=self.cor_laranja, height=4, corner_radius=2)
+        barra.pack(fill="x", side="top", anchor="n")
 
-        tk.Label(
-            card,
+        # Container interno para dar respiro aos textos e evitar qualquer sobreposição
+        container_textos = ctk.CTkFrame(card, fg_color="transparent")
+        container_textos.pack(fill="both", expand=True, padx=18, pady=(10, 10))
+
+        ctk.CTkLabel(
+            container_textos,
             text=titulo,
-            font=("Arial", 9, "bold"),
-            fg="#777777",
-            bg="white"
-        ).pack(anchor="w", padx=18, pady=(14, 5))
+            font=("Arial", 10, "bold"),
+            text_color="#777777"
+        ).pack(anchor="w", pady=(0, 2))
 
-        tk.Label(
-            card,
+        ctk.CTkLabel(
+            container_textos,
             text=valor,
             font=("Arial", 26, "bold"),
-            fg="#1A1A1A",
-            bg="white"
-        ).pack(anchor="w", padx=18)
+            text_color="#1A1A1A"
+        ).pack(anchor="w")
 
     # ==================================
     # MÓDULOS DE NAVEGAÇÃO
