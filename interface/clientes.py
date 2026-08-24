@@ -61,7 +61,6 @@ class TelaClientes:
         tabela_frame = tk.Frame(self.conteudo, bg="#F4F7F5")
         tabela_frame.pack(fill="both", expand=True, padx=40, pady=(0, 40))
 
-        # Configuração do Treeview (Tabela estilizada)
         colunas = ("ID", "NOME", "TIPO", "TELEFONE", "CIDADE")
         
         self.tree = ttk.Treeview(
@@ -71,21 +70,18 @@ class TelaClientes:
             selectmode="browse"
         )
 
-        # Definindo cabeçalhos
         self.tree.heading("ID", text="ID")
         self.tree.heading("NOME", text="Nome / Razão Social")
         self.tree.heading("TIPO", text="Tipo")
         self.tree.heading("TELEFONE", text="Telefone")
         self.tree.heading("CIDADE", text="Cidade")
 
-        # Definindo largura das colunas
         self.tree.column("ID", width=100, anchor="w")
         self.tree.column("NOME", width=300, anchor="w")
         self.tree.column("TIPO", width=150, anchor="w")
         self.tree.column("TELEFONE", width=150, anchor="w")
         self.tree.column("CIDADE", width=150, anchor="w")
 
-        # Scrollbar para a tabela
         scrollbar = ttk.Scrollbar(
             tabela_frame,
             orient="vertical",
@@ -96,11 +92,9 @@ class TelaClientes:
         self.tree.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
-        # Carregar os dados do Excel na tabela
         self.carregar_dados()
 
     def carregar_dados(self):
-        # Limpa itens atuais da tela
         for item in self.tree.get_children():
             self.tree.delete(item)
 
@@ -122,46 +116,162 @@ class TelaClientes:
             messagebox.showerror("Erro", f"Erro ao carregar clientes do Excel:\n{e}")
 
     def abrir_formulario_novo_cliente(self):
-        # Janela Toplevel para o Formulário
+        # Janela Toplevel maior para acomodar todos os campos com rolagem
         form = tk.Toplevel(self.conteudo)
         form.title("Novo Cliente - ProAgro Consultoria")
-        form.geometry("500x600")
+        form.geometry("750x650")
         form.config(bg="#F4F7F5")
-        form.grab_set()  # Torna a janela modal
+        form.grab_set()
 
+        # Título do Formulário
         tk.Label(
             form,
             text="Cadastrar Novo Cliente",
-            font=("Arial", 16, "bold"),
+            font=("Arial", 18, "bold"),
             fg="#173F2A",
             bg="#F4F7F5"
-        ).pack(pady=(20, 15))
+        ).pack(pady=(20, 10))
 
-        # Campos do Formulário
-        campos_frame = tk.Frame(form, bg="#F4F7F5")
-        campos_frame.pack(fill="both", expand=True, padx=30)
+        # Canvas e Scrollbar para o formulário longo
+        container = tk.Frame(form, bg="#F4F7F5")
+        container.pack(fill="both", expand=True, padx=20, pady=10)
 
-        tk.Label(campos_frame, text="Tipo de Cliente:", font=("Arial", 10, "bold"), bg="#F4F7F5", fg="#333").pack(anchor="w", pady=(5, 0))
-        tipo_combo = ttk.Combobox(campos_frame, values=["Pessoa Física", "Pessoa Jurídica"], state="readonly", font=("Arial", 10))
+        canvas = tk.Canvas(container, bg="#F4F7F5", highlightthickness=0)
+        scrollbar = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
+        
+        campos_frame = tk.Frame(canvas, bg="#F4F7F5")
+        campos_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=campos_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        # ==========================================
+        # FUNÇÕES DE MÁSCARA (FORMATAÇÃO AUTOMÁTICA)
+        # ==========================================
+        def formatar_telefone(event):
+            texto = entry_tel.get()
+            # Remove tudo que não é dígito
+            digitos = "".join(filter(str.isdigit, texto))[:11]
+            formatado = ""
+            if len(digitos) > 10:  # Celular com 9º dígito: (XX) 9XXXX-XXXX
+                formatado = f"({digitos[:2]}) {digitos[2]} {digitos[3:7]}-{digitos[7:]}" if len(digitos) > 7 else f"({digitos[:2]}) {digitos[2:]}"
+            elif len(digitos) > 6:  # (XX) XXXX-XXXX
+                formatado = f"({digitos[:2]}) {digitos[2:6]}-{digitos[6:]}"
+            elif len(digitos) > 2:
+                formatado = f"({digitos[:2]}) {digitos[2:]}"
+            elif len(digitos) > 0:
+                formatado = f"({digitos}"
+            
+            entry_tel.delete(0, tk.END)
+            entry_tel.insert(0, formatado)
+
+        def formatar_cpf_cnpj(event):
+            texto = entry_cpf_cnpj.get()
+            digitos = "".join(filter(str.isdigit, texto))[:14] # Máximo CNPJ (14 dígitos)
+            formatado = ""
+            
+            if len(digitos) <= 11:  # CPF: 000.000.000-00
+                if len(digitos) > 9:
+                    formatado = f"{digitos[:3]}.{digitos[3:6]}:{digitos[6:9]}-{digitos[9:]}" # Ajuste fino abaixo
+                    formatado = f"{digitos[:3]}.{digitos[3:6]}.{digitos[6:9]}-{digitos[9:]}"
+                elif len(digitos) > 6:
+                    formatado = f"{digitos[:3]}.{digitos[3:6]}.{digitos[6:]}"
+                elif len(digitos) > 3:
+                    formatado = f"{digitos[:3]}.{digitos[3:]}"
+                else:
+                    formatado = digitos
+            else:  # CNPJ: 00.000.000/0000-00
+                formatado = f"{digitos[:2]}.{digitos[2:5]}.{digitos[5:8]}/{digitos[8:12]}-{digitos[12:]}"
+
+            entry_cpf_cnpj.delete(0, tk.END)
+            entry_cpf_cnpj.insert(0, formatado)
+
+        # ==========================================
+        # CONSTRUÇÃO DOS CAMPOS (GRID DE 2 COLUNAS)
+        # ==========================================
+        
+        # Linha 0: Tipo e Nome
+        tk.Label(campos_frame, text="Tipo de Cliente:", font=("Arial", 9, "bold"), bg="#F4F7F5", fg="#333").grid(row=0, column=0, sticky="w", pady=(5, 0))
+        tk.Label(campos_frame, text="Nome / Razão Social *:", font=("Arial", 9, "bold"), bg="#F4F7F5", fg="#333").grid(row=0, column=1, sticky="w", pady=(5, 0), padx=(10, 0))
+
+        tipo_combo = ttk.Combobox(campos_frame, values=["Pessoa Física", "Pessoa Jurídica"], state="readonly", font=("Arial", 10), width=22)
         tipo_combo.set("Pessoa Física")
-        tipo_combo.pack(fill="x", pady=(0, 10))
+        tipo_combo.grid(row=1, column=0, sticky="ew", pady=(0, 10))
 
-        tk.Label(campos_frame, text="Nome / Razão Social:", font=("Arial", 10, "bold"), bg="#F4F7F5", fg="#333").pack(anchor="w", pady=(5, 0))
-        entry_nome = tk.Entry(campos_frame, font=("Arial", 10), relief="solid", bd=1)
-        entry_nome.pack(fill="x", pady=(0, 10), ipady=4)
+        entry_nome = tk.Entry(campos_frame, font=("Arial", 10), relief="solid", bd=1, width=38)
+        entry_nome.grid(row=1, column=1, sticky="ew", pady=(0, 10), padx=(10, 0), ipady=3)
 
-        tk.Label(campos_frame, text="Telefone:", font=("Arial", 10, "bold"), bg="#F4F7F5", fg="#333").pack(anchor="w", pady=(5, 0))
+        # Linha 1: CPF/CNPJ e RG/IE
+        tk.Label(campos_frame, text="CPF / CNPJ:", font=("Arial", 9, "bold"), bg="#F4F7F5", fg="#333").grid(row=2, column=0, sticky="w", pady=(5, 0))
+        tk.Label(campos_frame, text="RG / IE:", font=("Arial", 9, "bold"), bg="#F4F7F5", fg="#333").grid(row=2, column=1, sticky="w", pady=(5, 0), padx=(10, 0))
+
+        entry_cpf_cnpj = tk.Entry(campos_frame, font=("Arial", 10), relief="solid", bd=1)
+        entry_cpf_cnpj.grid(row=3, column=0, sticky="ew", pady=(0, 10), ipady=3)
+        entry_cpf_cnpj.bind("<KeyRelease>", formatar_cpf_cnpj)
+
+        entry_rg_ie = tk.Entry(campos_frame, font=("Arial", 10), relief="solid", bd=1)
+        entry_rg_ie.grid(row=3, column=1, sticky="ew", pady=(0, 10), padx=(10, 0), ipady=3)
+
+        # Linha 2: Telefone e E-mail
+        tk.Label(campos_frame, text="Telefone:", font=("Arial", 9, "bold"), bg="#F4F7F5", fg="#333").grid(row=4, column=0, sticky="w", pady=(5, 0))
+        tk.Label(campos_frame, text="E-mail:", font=("Arial", 9, "bold"), bg="#F4F7F5", fg="#333").grid(row=4, column=1, sticky="w", pady=(5, 0), padx=(10, 0))
+
         entry_tel = tk.Entry(campos_frame, font=("Arial", 10), relief="solid", bd=1)
-        entry_tel.pack(fill="x", pady=(0, 10), ipady=4)
+        entry_tel.grid(row=5, column=0, sticky="ew", pady=(0, 10), ipady=3)
+        entry_tel.bind("<KeyRelease>", formatar_telefone)
 
-        tk.Label(campos_frame, text="Cidade:", font=("Arial", 10, "bold"), bg="#F4F7F5", fg="#333").pack(anchor="w", pady=(5, 0))
+        entry_email = tk.Entry(campos_frame, font=("Arial", 10), relief="solid", bd=1)
+        entry_email.grid(row=5, column=1, sticky="ew", pady=(0, 10), padx=(10, 0), ipady=3)
+
+        # Linha 3: CEP e Endereço
+        tk.Label(campos_frame, text="CEP:", font=("Arial", 9, "bold"), bg="#F4F7F5", fg="#333").grid(row=6, column=0, sticky="w", pady=(5, 0))
+        tk.Label(campos_frame, text="Endereço (Logradouro):", font=("Arial", 9, "bold"), bg="#F4F7F5", fg="#333").grid(row=6, column=1, sticky="w", pady=(5, 0), padx=(10, 0))
+
+        entry_cep = tk.Entry(campos_frame, font=("Arial", 10), relief="solid", bd=1)
+        entry_cep.grid(row=7, column=0, sticky="ew", pady=(0, 10), ipady=3)
+
+        entry_endereco = tk.Entry(campos_frame, font=("Arial", 10), relief="solid", bd=1)
+        entry_endereco.grid(row=7, column=1, sticky="ew", pady=(0, 10), padx=(10, 0), ipady=3)
+
+        # Linha 4: Número e Complemento
+        tk.Label(campos_frame, text="Número:", font=("Arial", 9, "bold"), bg="#F4F7F5", fg="#333").grid(row=8, column=0, sticky="w", pady=(5, 0))
+        tk.Label(campos_frame, text="Complemento:", font=("Arial", 9, "bold"), bg="#F4F7F5", fg="#333").grid(row=8, column=1, sticky="w", pady=(5, 0), padx=(10, 0))
+
+        entry_numero = tk.Entry(campos_frame, font=("Arial", 10), relief="solid", bd=1)
+        entry_numero.grid(row=9, column=0, sticky="ew", pady=(0, 10), ipady=3)
+
+        entry_complemento = tk.Entry(campos_frame, font=("Arial", 10), relief="solid", bd=1)
+        entry_complemento.grid(row=9, column=1, sticky="ew", pady=(0, 10), padx=(10, 0), ipady=3)
+
+        # Linha 5: Bairro e Cidade
+        tk.Label(campos_frame, text="Bairro:", font=("Arial", 9, "bold"), bg="#F4F7F5", fg="#333").grid(row=10, column=0, sticky="w", pady=(5, 0))
+        tk.Label(campos_frame, text="Cidade:", font=("Arial", 9, "bold"), bg="#F4F7F5", fg="#333").grid(row=10, column=1, sticky="w", pady=(5, 0), padx=(10, 0))
+
+        entry_bairro = tk.Entry(campos_frame, font=("Arial", 10), relief="solid", bd=1)
+        entry_bairro.grid(row=11, column=0, sticky="ew", pady=(0, 10), ipady=3)
+
         entry_cidade = tk.Entry(campos_frame, font=("Arial", 10), relief="solid", bd=1)
-        entry_cidade.pack(fill="x", pady=(0, 10), ipady=4)
+        entry_cidade.grid(row=11, column=1, sticky="ew", pady=(0, 10), padx=(10, 0), ipady=3)
 
-        tk.Label(campos_frame, text="Observações:", font=("Arial", 10, "bold"), bg="#F4F7F5", fg="#333").pack(anchor="w", pady=(5, 0))
+        # Linha 6: UF
+        tk.Label(campos_frame, text="UF (Estado):", font=("Arial", 9, "bold"), bg="#F4F7F5", fg="#333").grid(row=12, column=0, sticky="w", pady=(5, 0))
+        entry_uf = tk.Entry(campos_frame, font=("Arial", 10), relief="solid", bd=1)
+        entry_uf.grid(row=13, column=0, sticky="ew", pady=(0, 10), ipady=3)
+
+        # Linha 7: Observações (Ocupa as duas colunas)
+        tk.Label(campos_frame, text="Observações:", font=("Arial", 9, "bold"), bg="#F4F7F5", fg="#333").grid(row=14, column=0, columnspan=2, sticky="w", pady=(5, 0))
         entry_obs = tk.Entry(campos_frame, font=("Arial", 10), relief="solid", bd=1)
-        entry_obs.pack(fill="x", pady=(0, 20), ipady=4)
+        entry_obs.grid(row=15, column=0, columnspan=2, sticky="ew", pady=(0, 15), ipady=3)
 
+        # ==========================================
+        # BOTÃO SALVAR
+        # ==========================================
         def salvar():
             nome = entry_nome.get().strip()
             if not nome:
@@ -172,23 +282,23 @@ class TelaClientes:
                 # 1. Gera ID automático
                 novo_id = gerar_id_cliente()
 
-                # 2. Monta o dicionário de dados estruturado para a tbClientes
+                # 2. Monta o dicionário completo mapeado exatamente com a tbClientes
                 dados = {
                     "ID_CLIENTE": novo_id,
                     "TIPO_CLIENTE": tipo_combo.get(),
                     "ID_TIPO_CLIENTE": "",
                     "NOME_RAZAO_SOCIAL": nome,
-                    "CPF_CNPJ": "",
-                    "RG_IE": "",
+                    "CPF_CNPJ": entry_cpf_cnpj.get().strip(),
+                    "RG_IE": entry_rg_ie.get().strip(),
                     "TELEFONE": entry_tel.get().strip(),
-                    "EMAIL": "",
-                    "CEP": "",
-                    "ENDERECO": "",
-                    "NUMERO": "",
-                    "COMPLEMENTO": "",
-                    "BAIRRO": "",
+                    "EMAIL": entry_email.get().strip(),
+                    "CEP": entry_cep.get().strip(),
+                    "ENDERECO": entry_endereco.get().strip(),
+                    "NUMERO": entry_numero.get().strip(),
+                    "COMPLEMENTO": entry_complemento.get().strip(),
+                    "BAIRRO": entry_bairro.get().strip(),
                     "CIDADE": entry_cidade.get().strip(),
-                    "UF": "",
+                    "UF": entry_uf.get().strip().upper(),
                     "OBSERVACOES": entry_obs.get().strip(),
                     "DATA_CADASTRO": "",
                     "ATIVO": "SIM"
@@ -197,13 +307,13 @@ class TelaClientes:
                 # 3. Salva no Excel
                 adicionar_cliente(dados)
 
-                # 4. Cria a estrutura de pastas automaticamente
+                # 4. Cria as pastas automáticas no Windows
                 criar_pasta_cliente(novo_id, nome)
 
-                messagebox.cesso = messagebox.showinfo("Sucesso", f"Cliente {novo_id} cadastrado e pastas criadas com sucesso!", parent=form)
+                messagebox.showinfo("Sucesso", f"Cliente {novo_id} cadastrado, gravado no Excel e pastas criadas com sucesso!", parent=form)
                 
                 form.destroy()
-                self.carregar_dados() # Atualiza a tabela na tela principal
+                self.carregar_dados()
 
             except Exception as e:
                 messagebox.showerror("Erro", f"Ocorreu um erro ao salvar o cliente:\n{e}", parent=form)
@@ -221,4 +331,4 @@ class TelaClientes:
             pady=10,
             cursor="hand2"
         )
-        btn_salvar.pack(fill="x", pady=10)
+        btn_salvar.grid(row=16, column=0, columnspan=2, sticky="ew", pady=(10, 20))
